@@ -38,16 +38,18 @@ public class ExtDirectResponse extends BaseResponse {
 	private boolean streamResponse;
 
 	@JsonIgnore
-	private Class<?> jsonView;
+	private SerializerConfiguration serializerConfiguration;
 
 	public ExtDirectResponse() {
 		// needs a default constructor for testing
+		this.serializerConfiguration = new SerializerConfiguration();
 	}
 
 	public ExtDirectResponse(ExtDirectRequest directRequest) {
 		this.action = directRequest.getAction();
 		this.method = directRequest.getMethod();
 		this.tid = directRequest.getTid();
+		this.serializerConfiguration = new SerializerConfiguration();
 		setType(directRequest.getType());
 	}
 
@@ -55,6 +57,7 @@ public class ExtDirectResponse extends BaseResponse {
 		this.action = request.getParameter("extAction");
 		this.method = request.getParameter("extMethod");
 		this.tid = Integer.parseInt(request.getParameter("extTID"));
+		this.serializerConfiguration = new SerializerConfiguration();
 		setType(request.getParameter("extType"));
 	}
 
@@ -87,20 +90,20 @@ public class ExtDirectResponse extends BaseResponse {
 		this.streamResponse = streamResponse;
 	}
 
-	public Class<?> getJsonView() {
-		return this.jsonView;
+	public SerializerConfiguration getSerializerConfiguration() {
+		return this.serializerConfiguration;
 	}
 
-	public void setJsonView(Class<?> jsonView) {
-		this.jsonView = jsonView;
+	public void setSerializerConfiguration(SerializerConfiguration serializerConfiguration) {
+		this.serializerConfiguration = serializerConfiguration;
 	}
 
 	@Override
 	public String toString() {
 		return "ExtDirectResponse [tid=" + this.tid + ", action=" + this.action
 				+ ", method=" + this.method + ", result=" + this.result
-				+ ", streamResponse=" + this.streamResponse + ", jsonView="
-				+ this.jsonView + "]";
+				+ ", streamResponse=" + this.streamResponse + ", serializerConfiguration="
+				+ this.serializerConfiguration + "]";
 	}
 
 }

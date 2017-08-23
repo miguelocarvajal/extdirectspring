@@ -63,7 +63,6 @@ import ch.ralscha.extdirectspring.bean.ExtDirectFormPostResult;
 import ch.ralscha.extdirectspring.bean.ExtDirectPollResponse;
 import ch.ralscha.extdirectspring.bean.ExtDirectRequest;
 import ch.ralscha.extdirectspring.bean.ExtDirectResponse;
-import ch.ralscha.extdirectspring.bean.ExtDirectResponseRaw;
 import ch.ralscha.extdirectspring.bean.ExtDirectStoreResult;
 import ch.ralscha.extdirectspring.bean.JsonViewHint;
 import ch.ralscha.extdirectspring.bean.ModelAndJsonView;
@@ -202,6 +201,7 @@ public class RouterController {
 	public String router(HttpServletRequest request, HttpServletResponse response,
 			@RequestParam("extAction") String extAction,
 			@RequestParam("extMethod") String extMethod) throws IOException {
+System.out.println("router POST");
 
 		ExtDirectResponse directResponse = new ExtDirectResponse(request);
 		MethodInfo methodInfo = this.methodInfoCache.get(extAction, extMethod);
@@ -245,14 +245,14 @@ public class RouterController {
 					ExtDirectFormPostResult formPostResult = (ExtDirectFormPostResult) model
 							.get("extDirectFormPostResult");
 					directResponse.setResult(formPostResult.getResult());
-					directResponse.setJsonView(
+					directResponse.getSerializerConfiguration().setJsonView(
 							getJsonView(formPostResult, methodInfo.getJsonView()));
 				}
 				else if (model.containsKey("edFormPostResult")) {
 					EdFormPostResult formPostResult = (EdFormPostResult) model
 							.get("edFormPostResult");
 					directResponse.setResult(formPostResult.result());
-					directResponse.setJsonView(
+					directResponse.getSerializerConfiguration().setJsonView(
 							getJsonView(formPostResult, methodInfo.getJsonView()));
 				}
 
@@ -335,16 +335,8 @@ public class RouterController {
 			try {
 				ExtDirectResponse directResponse = future.get();
 				streamResponse = streamResponse || directResponse.isStreamResponse();
-				Class<?> jsonView = directResponse.getJsonView();
-				if (jsonView == null) {
-					directResponses.add(directResponse);
-				}
-				else {
-					String jsonResult = objectMapper.writerWithView(jsonView)
-							.writeValueAsString(directResponse.getResult());
-					directResponses
-							.add(new ExtDirectResponseRaw(directResponse, jsonResult));
-				}
+
+				directResponse.getSerializerConfiguration().write(objectMapper, directResponses, directResponse);
 			}
 			catch (InterruptedException e) {
 				log.error("Error invoking method", e);
@@ -375,22 +367,12 @@ public class RouterController {
 				response, locale);
 		boolean streamResponse = this.configurationService.getConfiguration()
 				.isStreamResponse() || directResponse.isStreamResponse();
-		Class<?> jsonView = directResponse.getJsonView();
 
-		Object responseObject;
-		if (jsonView == null) {
-			responseObject = Collections.singleton(directResponse);
-		}
-		else {
-			ObjectMapper objectMapper = this.configurationService.getJsonHandler()
-					.getMapper();
-			String jsonResult = objectMapper.writerWithView(jsonView)
-					.writeValueAsString(directResponse.getResult());
-			responseObject = Collections
-					.singleton(new ExtDirectResponseRaw(directResponse, jsonResult));
-		}
+		Object responseObject = directResponse.getSerializerConfiguration().write(this.configurationService.getJsonHandler().getMapper(), directResponse);
+System.out.println("directRequest: " + directRequest.getMetadata().get("nestedView"));
+System.out.println("handleMethodCallOne called");
 
-		writeJsonResponse(response, responseObject, null, streamResponse);
+		writeJsonResponse(directRequest, response, responseObject, streamResponse);
 	}
 
 	private void handleMethodCallsSequential(List<ExtDirectRequest> directRequests,
@@ -407,18 +389,11 @@ public class RouterController {
 			ExtDirectResponse directResponse = handleMethodCall(directRequest, request,
 					response, locale);
 			streamResponse = streamResponse || directResponse.isStreamResponse();
-			Class<?> jsonView = directResponse.getJsonView();
-			if (jsonView == null) {
-				directResponses.add(directResponse);
-			}
-			else {
-				String jsonResult = objectMapper.writerWithView(jsonView)
-						.writeValueAsString(directResponse.getResult());
-				directResponses.add(new ExtDirectResponseRaw(directResponse, jsonResult));
-			}
+
+			directResponse.getSerializerConfiguration().write(objectMapper, directResponses, directResponse);
 		}
 
-		writeJsonResponse(response, directResponses, null, streamResponse);
+		writeJsonResponse(directRequest, response, directResponses, streamResponse);
 	}
 
 	@SuppressWarnings({ "rawtypes", "unchecked" })
@@ -485,11 +460,11 @@ public class RouterController {
 
 						directResponse.setResult(result);
 						if (modelAndJsonView != null) {
-							directResponse.setJsonView(getJsonView(modelAndJsonView,
+							directResponse.getSerializerConfiguration().setJsonView(getJsonView(modelAndJsonView,
 									methodInfo.getJsonView()));
 						}
 						else {
-							directResponse.setJsonView(
+							directResponse.getSerializerConfiguration().setJsonView(
 									getJsonView(result, methodInfo.getJsonView()));
 						}
 
@@ -546,22 +521,21 @@ public class RouterController {
 		}
 	}
 
-	public void writeJsonResponse(HttpServletRequest request,
-			HttpServletResponse response, Object responseObject, Class<?> jsonView)
+	public void writeJsonResponse(ExtDirectRequest directRequest, HttpServletRequest request,
+			HttpServletResponse response, Object responseObject)
 			throws IOException {
-		writeJsonResponse(response, responseObject, jsonView,
+		writeJsonResponse(directRequest, response, responseObject,
 				this.configurationService.getConfiguration().isStreamResponse(),
 				ExtDirectSpringUtil.isMultipart(request));
 	}
 
-	private void writeJsonResponse(HttpServletResponse response, Object responseObject,
-			Class<?> jsonView, boolean streamResponse) throws IOException {
-		writeJsonResponse(response, responseObject, jsonView, streamResponse, false);
+	private void writeJsonResponse(ExtDirectRequest directRequest, HttpServletResponse response, Object responseObject,
+			boolean streamResponse) throws IOException {
+		writeJsonResponse(directRequest, response, responseObject, streamResponse, false);
 	}
 
-	@SuppressWarnings("resource")
-	public void writeJsonResponse(HttpServletResponse response, Object responseObject,
-			Class<?> jsonView, boolean streamResponse, boolean isMultipart)
+	public void writeJsonResponse(ExtDirectRequest directRequest, HttpServletResponse response, Object responseObject,
+			boolean streamResponse, boolean isMultipart)
 			throws IOException {
 
 		ObjectMapper objectMapper = this.configurationService.getJsonHandler()
@@ -604,6 +578,8 @@ public class RouterController {
 
 			response.setContentType(APPLICATION_JSON.toString());
 			response.setCharacterEncoding(APPLICATION_JSON.getCharset().name());
+System.out.println("JSON NO WRAPPER");
+System.out.print("responseObject: " + responseObject);
 
 			ServletOutputStream outputStream = response.getOutputStream();
 
@@ -688,6 +664,7 @@ public class RouterController {
 	}
 
 	private static Class<?> getJsonView(Object result, Class<?> defaultJsonView) {
+System.out.println("getJsonView result: " + result);
 		if (result instanceof JsonViewHint) {
 			Class<?> jsonView = ((JsonViewHint) result).getJsonView();
 			if (jsonView != null) {
